@@ -1,0 +1,11 @@
+[package]
+name = "osu-rank"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+postgresql_embedded = { version = "0.18.3", features = ["tokio"] }
+serenity = "0.12.4"
+serenity-commands = "0.8.0"
+sqlx = { version = "0.8.5", features = ["postgres"] }
+tokio = { version = "1.44.2", features = ["full"] }
