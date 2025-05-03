@@ -201,8 +201,8 @@ impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::Command(cmd) = interaction {
 
-            let client_id: u64 = 40451;
-            let client_secret = String::from("OXNVv1nDMM2StzYn23sN5OByxifCxnwcvasPpwCB");
+            let client_id: u64 = 40461;
+            let client_secret = String::from("ycVGwpLqDPlM4RBzkbOuSnqAJLJtNbWTkRFcpeXW");
             let osu = Osu::new(client_id, client_secret).await.unwrap();
 
             // Extraemos nuestro enum desde los datos
