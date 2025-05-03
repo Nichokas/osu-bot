@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-postgresql_embedded = { version = "0.18.3", features = ["tokio"] }
+dotenv = "0.15.0"
 rosu-v2 = "0.10.0"
 serenity = { version = "0.12.4", features =  ["builder", "client", "gateway", "http", "model"] }
 serenity-commands = "0.8.0"
