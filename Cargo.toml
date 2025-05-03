@@ -11,4 +11,3 @@ serenity-commands = "0.8.0"
 sqlx = { version = "0.8.5", features = ["postgres"] }
 tokio = { version = "1.44.2", features = ["full"] }
 serde = { version = "1.0.219", features = ["derive"] }
-anyhow = "1.0.98"

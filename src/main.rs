@@ -114,12 +114,10 @@ impl AllCommands {
             },
             AllCommands::AddUser { osu_username: osu_id } => {
                 let data_read = ctx.data.read().await;
-                if cmd.user.id==UserId::new(976878661242331156){
                     let guild_id_str = cmd.guild_id.map_or(
                         "Ningún servidor (DM)".to_string(),
                         |gid| gid.to_string(),
                     );
-
 
                     let pool = data_read
                         .get::<PostgresPool>()
@@ -134,17 +132,35 @@ impl AllCommands {
                         .execute(&pool)
                         .await
                         .expect("Error creando tabla");
-                    sqlx::query(format!("INSERT INTO osu_{} (osu_id) VALUES ($1)",guild_id_str).as_ref())
+                    // Check if the user already exists
+                    let query = format!("SELECT * FROM osu_{} WHERE osu_id = $1", guild_id_str);
+                    let exists = sqlx::query(&query)
                         .bind(&osu_id)
-                        .execute(&pool)
+                        .fetch_optional(&pool)
                         .await
-                        .expect("Error insertando usuario");
-                    CreateInteractionResponseMessage::new()
-                        .content(format!("Usuario con id de osu {} en la base de datos del servidor osu_{} se ha registrado en la base de datos correctamente", osu_id, guild_id_str))
-                } else {
-                    CreateInteractionResponseMessage::new()
-                        .content("SOS")
-                }
+                        .expect("Error consultando usuario existente")
+                        .is_some();
+                    if exists {
+                        CreateInteractionResponseMessage::new()
+                            .content(format!("El usuario con id de osu {} ya está registrado en la base de datos del servidor osu_{}", osu_id, guild_id_str))
+                    } else {
+                        match osu.user(osu_id.clone()).await {
+                            Ok(_) => {
+                                sqlx::query(format!("INSERT INTO osu_{} (osu_id) VALUES ($1)",guild_id_str).as_ref())
+                                    .bind(&osu_id)
+                                    .execute(&pool)
+                                    .await
+                                    .expect("Error insertando usuario");
+                                CreateInteractionResponseMessage::new()
+                                    .content(format!("Usuario con id de osu {} se ha registrado en la base de datos de este servidor correctamente", osu_id))
+                            }
+                            Err(_) => {
+                                CreateInteractionResponseMessage::new()
+                                    .content(format!("El usuario {} no existe en osu", osu_id))
+                            }
+                        }
+                    }
+
             },
         }
     }

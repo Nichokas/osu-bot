@@ -1608,7 +1608,6 @@ dependencies = [
 name = "osu-rank"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "postgresql_embedded",
  "rosu-v2",
  "serde",
