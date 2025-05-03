@@ -1,11 +1,11 @@
-use std::fmt::format;
-use serenity::all::{async_trait, Client, Context, CreateInteractionResponse, CreateInteractionResponseMessage, EventHandler, GatewayIntents, Interaction, CommandInteraction, User, UserId, CreateEmbed, Colour, CreateEmbedFooter};
+use postgresql_embedded::{PostgreSQL, Status, BOOTSTRAP_DATABASE};
+use rosu_v2::prelude::*;
+use serde::{Deserialize, Serialize};
+use serenity::all::{async_trait, Client, Colour, CommandInteraction, Context, CreateEmbed, CreateEmbedFooter, CreateInteractionResponse, CreateInteractionResponseMessage, EventHandler, GatewayIntents, Interaction, UserId};
 use serenity::model::application::Command;
-use serenity::builder::CreateCommand;
-use serenity_commands::{Commands, Command as DeriveCommand};
-use postgresql_embedded::{PostgreSQL, Result, Status, BOOTSTRAP_DATABASE};
 use serenity::prelude::TypeMapKey;
-use sqlx::{Pool, postgres::PgPool, PgConnection, Postgres, Row};
+use serenity_commands::Commands;
+use sqlx::{postgres::PgPool, Pool, Postgres, Row};
 
 struct PostgresKey;
 struct PostgresPool;
@@ -17,6 +17,12 @@ impl TypeMapKey for PostgresPool {
     type Value = Pool<Postgres>;
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, PartialOrd, Clone)]
+struct PlayerData {
+    osu_id: String,
+    pp: f32,
+}
+
 // Define sólo el comando Ping
 #[derive(Debug, Commands)]
 enum AllCommands {
@@ -24,13 +30,13 @@ enum AllCommands {
     Rank,
     /// Añade un osuario de osu al ranking
     AddUser {
-        /// osu id
-        osu_id: String,
+        /// osu username
+        osu_username: String,
     },
 }
 
 impl AllCommands {
-    async fn run(self, ctx: &Context, cmd: &CommandInteraction) -> serenity::all::CreateInteractionResponseMessage {
+    async fn run(self, ctx: &Context, cmd: &CommandInteraction, osu: Osu) -> CreateInteractionResponseMessage {
         match self {
             AllCommands::Rank => {
                 let data_read = ctx.data.read().await;
@@ -74,31 +80,39 @@ impl AllCommands {
 
                 // Create the embed
                 let mut embed = CreateEmbed::new()
-                    .title(format!("Leaderboard de osu! - Servidor {}", cmd.guild_id.unwrap_or_default()))
+                    .title("Leaderboard de osu!".to_string())
                     .description("Ranking de jugadores registrados")
                     .color(Colour::PURPLE)
                     .footer(CreateEmbedFooter::new("Powered by osu!"))
                     .thumbnail("https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Osu%21_Logo_2016.svg/1200px-Osu%21_Logo_2016.svg.png");
 
+                let mut osu_data:Vec<PlayerData> = vec![];
+
                 // Add users to the embed
                 if rows.is_empty() {
                     embed = embed.field("Sin usuarios", "No hay jugadores registrados en este servidor.", false);
-                } else {
-                    for (index, row) in rows.iter().enumerate() {
-                        let osu_id: &str = row.try_get("osu_id").unwrap_or("ID desconocido");
+                 } else {
+                    for (_index, row) in rows.iter().enumerate() {
+                        let osu_id: &str = row.try_get("osu_id").unwrap();
+                        osu_data.push(PlayerData{osu_id: osu_id.to_owned(), pp: osu.user(osu_id).await.unwrap().statistics.unwrap().pp});
+                    }
+
+                    osu_data.sort_by(|a, b| b.pp.partial_cmp(&a.pp).unwrap());
+
+                    let mut counter = 1;
+                    for local_player in osu_data.iter().take(15) {
                         embed = embed.field(
-                            format!("#{} - Usuario", index + 1),
-                            format!("ID: {}", osu_id),
+                            format!("#{} {}",counter,local_player.osu_id),
+                            format!("pp: {:?}", osu.user(local_player.osu_id.clone()).await.unwrap().statistics.unwrap().pp),
                             false
                         );
+                        counter+=1;
                     }
                 }
-
-                // Return the embed
                 CreateInteractionResponseMessage::new()
                     .embed(embed)
             },
-            AllCommands::AddUser { osu_id } => {
+            AllCommands::AddUser { osu_username: osu_id } => {
                 let data_read = ctx.data.read().await;
                 if cmd.user.id==UserId::new(976878661242331156){
                     let guild_id_str = cmd.guild_id.map_or(
@@ -140,7 +154,6 @@ struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
-    // Al estar listo, registramos globalmente nuestros comandos
     async fn ready(&self, ctx: Context, _: serenity::all::Ready) {
         let mut postgresql = PostgreSQL::default();
         postgresql.setup().await.unwrap();
@@ -171,10 +184,15 @@ impl EventHandler for Handler {
     // Escuchamos interacciones (slash commands)
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::Command(cmd) = interaction {
+
+            let client_id: u64 = 40451;
+            let client_secret = String::from("OXNVv1nDMM2StzYn23sN5OByxifCxnwcvasPpwCB");
+            let osu = Osu::new(client_id, client_secret).await.unwrap();
+
             // Extraemos nuestro enum desde los datos
             let data = AllCommands::from_command_data(&cmd.data)
                 .expect("Error parseando comando");
-            let response = data.run(&ctx, &cmd).await;
+            let response = data.run(&ctx, &cmd, osu).await;
             cmd.create_response(
                 &ctx.http,
                 CreateInteractionResponse::Message(response),
@@ -194,7 +212,7 @@ async fn main() {
     let handler = Handler;
 
     // Construimos el cliente sin GuildId
-    let mut client = Client::builder(&token, GatewayIntents::non_privileged())
+    let mut client = Client::builder(token, GatewayIntents::non_privileged())
         .event_handler(handler)
         .await
         .expect("Error creando el cliente");
