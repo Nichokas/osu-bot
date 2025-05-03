@@ -1,4 +1,3 @@
-use postgresql_embedded::{PostgreSQL, Status, BOOTSTRAP_DATABASE};
 use rosu_v2::prelude::*;
 use serde::{Deserialize, Serialize};
 use serenity::all::{async_trait, Client, Colour, CommandInteraction, Context, CreateEmbed, CreateEmbedFooter, CreateInteractionResponse, CreateInteractionResponseMessage, EventHandler, GatewayIntents, Interaction, UserId};
@@ -6,13 +5,10 @@ use serenity::model::application::Command;
 use serenity::prelude::TypeMapKey;
 use serenity_commands::Commands;
 use sqlx::{postgres::PgPool, Pool, Postgres, Row};
+use std::env;
+use dotenv::dotenv;
 
-struct PostgresKey;
 struct PostgresPool;
-impl TypeMapKey for PostgresKey {
-    type Value = PostgreSQL;
-}
-
 impl TypeMapKey for PostgresPool {
     type Value = Pool<Postgres>;
 }
@@ -171,39 +167,35 @@ struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, _: serenity::all::Ready) {
-        let mut postgresql = PostgreSQL::default();
-        postgresql.setup().await.unwrap();
-        postgresql.start().await.unwrap();
-        let mut data = ctx.data.write().await;
-        match postgresql.status() {
-            Status::Started => {
-                let settings = postgresql.settings();
-                let url = settings.url(BOOTSTRAP_DATABASE);
-                let pool = PgPool::connect(&url).await.unwrap();
-
-                data.insert::<PostgresPool>(pool);
-            }
-            other => {
-                eprintln!("⚠️ Estado inesperado de PostgreSQL: {:?}", other);
-            }
+        let database_url = env::var("DATABASE_URL").expect("Missing DATABASE_URL env");
+        let pool = PgPool::connect(&database_url)
+            .await
+            .expect("Error connecting to database");
+        {
+            let mut data = ctx.data.write().await;
+            data.insert::<PostgresPool>(pool);
         }
 
-        data.insert::<PostgresKey>(postgresql);
         Command::set_global_commands(
             &ctx.http,
-            AllCommands::create_commands(), // Vec<CreateCommand>
+            AllCommands::create_commands(),
         )
-            .await
-            .expect("Error registrando comandos globales");
+        .await
+        .expect("Error registrando comandos globales");
     }
 
     // Escuchamos interacciones (slash commands)
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::Command(cmd) = interaction {
-
-            let client_id: u64 = 40461;
-            let client_secret = String::from("ycVGwpLqDPlM4RBzkbOuSnqAJLJtNbWTkRFcpeXW");
-            let osu = Osu::new(client_id, client_secret).await.unwrap();
+            let osu_client_id: u64 = env::var("OSU_CLIENT_ID")
+                .expect("Missing OSU_CLIENT_ID")
+                .parse()
+                .expect("OSU_CLIENT_ID must be a valid number");
+            let osu_client_secret: String = env::var("OSU_CLIENT_SECRET")
+                .expect("Missing OSU_CLIENT_SECRET");
+            let osu = Osu::new(osu_client_id, osu_client_secret)
+                .await
+                .expect("Failed to create Osu client");
 
             // Extraemos nuestro enum desde los datos
             let data = AllCommands::from_command_data(&cmd.data)
@@ -221,8 +213,8 @@ impl EventHandler for Handler {
 
 #[tokio::main]
 async fn main() {
-    // Tu token aquí
-    let token = "MTM2Nzg5MzQ2NzA4MjEyOTYzOQ.GM9m9s.oMBJw8r036mbZiSK-Te29bFtGCzvQyHcMyejR0";
+    dotenv().ok();
+    let token = env::var("DISCORD_TOKEN").expect("Missing DISCORD_TOKEN");
 
     // Creamos el handler
     let handler = Handler;
