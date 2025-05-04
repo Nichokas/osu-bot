@@ -106,6 +106,7 @@ impl AllCommands {
                     }
                 }
                 CreateInteractionResponseMessage::new()
+                    .content(format!("Generando ranking para {}...", cmd.user.id.mention()))
                     .embed(embed)
             },
             AllCommands::AddUser { osu_username: osu_id } => {
@@ -201,12 +202,12 @@ impl EventHandler for Handler {
             let data = AllCommands::from_command_data(&cmd.data)
                 .expect("Error parseando comando");
             let response = data.run(&ctx, &cmd, osu).await;
-            cmd.create_response(
+            cmd.create_interaction_response(
                 &ctx.http,
-                CreateInteractionResponse::Message(response),
+                CreateInteractionResponse::ChannelMessage(response),
             )
-                .await
-                .expect("Error creando respuesta");
+            .await
+            .expect("Error creando respuesta");
         }
     }
 }
