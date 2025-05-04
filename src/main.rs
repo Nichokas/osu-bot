@@ -203,9 +203,9 @@ impl EventHandler for Handler {
             let data = AllCommands::from_command_data(&cmd.data)
                 .expect("Error parseando comando");
             let response = data.run(&ctx, &cmd, osu).await;
-            cmd.create_interaction_response(
+            cmd.create_response(
                 &ctx.http,
-                CreateInteractionResponse::ChannelMessage(response),
+                CreateInteractionResponse::ChannelMessageWithSource(response),
             )
             .await
             .expect("Error creando respuesta");
