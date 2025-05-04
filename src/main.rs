@@ -1,6 +1,9 @@
 use rosu_v2::prelude::*;
 use serde::{Deserialize, Serialize};
-use serenity::all::{async_trait, Client, Colour, CommandInteraction, Context, CreateEmbed, CreateEmbedFooter, CreateInteractionResponse, CreateInteractionResponseMessage, EventHandler, GatewayIntents, Interaction};
+// Add this to your imports at the top
+use serenity::all::{async_trait, Client, Colour, CommandInteraction, Context, CreateEmbed,
+                    CreateEmbedFooter, CreateInteractionResponse, CreateInteractionResponseMessage,
+                    EditInteractionResponse, EventHandler, GatewayIntents, Interaction};
 use serenity::prelude::Mentionable;
 use serenity::model::application::Command;
 use serenity::prelude::TypeMapKey;
@@ -36,6 +39,16 @@ impl AllCommands {
     async fn run(self, ctx: &Context, cmd: &CommandInteraction, osu: Osu) -> CreateInteractionResponseMessage {
         match self {
             AllCommands::Rank => {
+                // Send initial response
+                cmd.create_response(
+                    &ctx.http,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .content(format!("Generando ranking para {}...", cmd.user.id.mention()))
+                    ),
+                ).await.expect("Error creating initial response");
+
+                // Get database connection
                 let data_read = ctx.data.read().await;
                 let pool = data_read
                     .get::<PostgresPool>()
@@ -48,12 +61,12 @@ impl AllCommands {
                     |gid| gid.to_string(),
                 );
 
-                // Create the table query
+                // Create the table query and ensure it exists
                 let create_table_query = format!(
                     "CREATE TABLE IF NOT EXISTS osu_{} (
-                    id           SERIAL PRIMARY KEY,
-                    osu_id TEXT   NOT NULL
-                    )",
+        id           SERIAL PRIMARY KEY,
+        osu_id TEXT   NOT NULL
+        )",
                     guild_id_str
                 );
 
@@ -70,8 +83,13 @@ impl AllCommands {
                 let rows = match sqlx::query(&query).fetch_all(&pool).await {
                     Ok(rows) => rows,
                     Err(e) => {
-                        return CreateInteractionResponseMessage::new()
-                            .content(format!("Error al obtener la lista de usuarios: {}", e));
+                        // Edit response with error message
+                        cmd.edit_response(
+                            &ctx.http,
+                            EditInteractionResponse::new()
+                                .content(format!("Error al obtener la lista de usuarios: {}", e))
+                        ).await.expect("Error editing response");
+                        return CreateInteractionResponseMessage::new();
                     }
                 };
 
@@ -88,7 +106,7 @@ impl AllCommands {
                 // Add users to the embed
                 if rows.is_empty() {
                     embed = embed.field("Sin usuarios", "No hay jugadores registrados en este servidor.", false);
-                 } else {
+                } else {
                     for (_index, row) in rows.iter().enumerate() {
                         let osu_id: &str = row.try_get("osu_id").unwrap();
                         osu_data.push(PlayerData{osu_id: osu_id.to_owned(), pp: osu.user(osu_id).await.unwrap().statistics.unwrap().pp});
@@ -106,9 +124,16 @@ impl AllCommands {
                         counter+=1;
                     }
                 }
+
+                // Edit the original response to include the embed
+                cmd.edit_response(
+                    &ctx.http,
+                    EditInteractionResponse::new()
+                        .embed(embed)
+                ).await.expect("Error editing response");
+
+                // Return empty response since we've already handled it
                 CreateInteractionResponseMessage::new()
-                    .content(format!("Generando ranking para {}...", cmd.user.id.mention()))
-                    .embed(embed)
             },
             AllCommands::AddUser { osu_username: osu_id } => {
                 let data_read = ctx.data.read().await;
