@@ -205,7 +205,7 @@ impl EventHandler for Handler {
             let response = data.run(&ctx, &cmd, osu).await;
             cmd.create_response(
                 &ctx.http,
-                CreateInteractionResponse::ChannelMessageWithSource(response),
+                CreateInteractionResponse::Message(response),
             )
             .await
             .expect("Error creando respuesta");
