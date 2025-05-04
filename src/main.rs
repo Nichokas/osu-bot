@@ -1,6 +1,7 @@
 use rosu_v2::prelude::*;
 use serde::{Deserialize, Serialize};
-use serenity::all::{async_trait, Client, Colour, CommandInteraction, Context, CreateEmbed, CreateEmbedFooter, CreateInteractionResponse, CreateInteractionResponseMessage, EventHandler, GatewayIntents, Interaction, UserId};
+use serenity::all::{async_trait, Client, Colour, CommandInteraction, Context, CreateEmbed, CreateEmbedFooter, CreateInteractionResponse, CreateInteractionResponseMessage, EventHandler, GatewayIntents, Interaction};
+use serenity::prelude::Mentionable;
 use serenity::model::application::Command;
 use serenity::prelude::TypeMapKey;
 use serenity_commands::Commands;
